@@ -12,7 +12,8 @@ scraped by Chris Meller. Underlying data is owned by
 [Starbucks](https://www.starbucks.com/).
 
 ## development
-- cd cmd/store-server
-- go run starbucks.go
-- curl -X POST localhost:8080/search -d '{"postalCode": "92612", "distance": 5}'
-- cntrl + C to stop the server
+- `cd cmd/store-server`
+- update `config.json` with valid google maps api key
+- `go run starbucks.go`
+- `curl -X POST localhost:8080/search -d '{"postalCode": "92612", "distance": 5}'`
+- `cntrl + C` to stop the server

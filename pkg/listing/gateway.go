@@ -5,17 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
-	"time"
 
+	"github.com/hankgalt/starbucks/pkg/config"
 	"github.com/hankgalt/starbucks/pkg/constants"
 	"github.com/hankgalt/starbucks/pkg/loader"
-	"github.com/sirupsen/logrus"
-	log "github.com/sirupsen/logrus"
 
 	// "github.com/paultag/go-haversine"
 	"gitlab.com/xerra/common/vincenty"
@@ -30,7 +28,7 @@ type Gateway interface {
 
 type JsonGateway struct {
 	mu      sync.RWMutex
-	log     *log.Logger
+	config  *config.Configuration
 	stores  map[uint32]*Store
 	LatMap  map[string][]uint32
 	LongMap map[string][]uint32
@@ -45,23 +43,9 @@ type GatewayStats struct {
 	Ready     bool
 }
 
-func NewJasonGateway() *JsonGateway {
-	log := logrus.StandardLogger()
-	lvl, err := logrus.ParseLevel(os.Getenv("DEBUG_LVL"))
-	if err != nil {
-		log.SetLevel(lvl)
-	} else {
-		log.SetLevel(logrus.DebugLevel)
-	}
-	log.SetOutput(os.Stdout)
-
-	log.SetFormatter(&logrus.JSONFormatter{
-		TimestampFormat: time.RFC3339Nano,
-		PrettyPrint:     true,
-	})
-
+func NewJasonGateway(config *config.Configuration) *JsonGateway {
 	jg := &JsonGateway{
-		log:     log,
+		config:  config,
 		stores:  map[uint32]*Store{},
 		LatMap:  map[string][]uint32{},
 		LongMap: map[string][]uint32{},
@@ -74,7 +58,7 @@ func NewJasonGateway() *JsonGateway {
 
 func (jg *JsonGateway) ProcessFile() {
 	defer func() {
-		jg.log.Debug("\033[34m ProcessFile() - finished processing stores \033[0m")
+		log.Println("ProcessFile() - finished processing stores")
 	}()
 
 	ctx := context.WithValue(context.Background(), constants.FileNameContextKey, "locations.json")
@@ -94,7 +78,7 @@ func (jg *JsonGateway) ProcessFile() {
 		wgp.Wait()
 		jg.ready = true
 		stats := jg.GetStoreStats()
-		jg.log.Debug("\033[34m ProcessFile() - gateway stats: \033[0m", stats)
+		log.Println("ProcessFile() - gateway stats: ", stats)
 	}()
 }
 
@@ -104,18 +88,18 @@ func (jg *JsonGateway) GetStore(storeId uint32) (*Store, error) {
 
 	s := jg.lookup(storeId)
 	if s == nil {
-		return nil, fmt.Errorf("store with storeID %d doesn't exist", storeId)
+		log.Printf("GetStore() - store with storeId %d doesn't exist", storeId)
+		return nil, fmt.Errorf("store with storeId %d doesn't exist", storeId)
 	}
 	return s, nil
 }
 
 func (jg *JsonGateway) GetStoresForPostalCode(postalCode string, dist int) ([]*Store, error) {
-	url := fmt.Sprintf("https://maps.google.com/maps/api/geocode/json?components=country:US|postal_code:%s&sensor=false&key=AIzaSyCcutJ7WAvncYD2vyyenPCF84Ycs5oDB9c", postalCode)
+	url := fmt.Sprintf("https://maps.google.com/maps/api/geocode/json?components=country:US|postal_code:%s&sensor=false&key=%s", postalCode, jg.config.GEOCODER_API_KEY)
 
 	r, err := http.Get(url)
 	if err != nil {
-		// fmt.Printf("GetStoresForPostalCode() - no stores found for postalCoode: %s, err: %v\n", postalCode, err)
-		jg.log.Error("GetStoresForGeoPoint() - no stores found for postalCoode: %s, err: %v", postalCode, err)
+		log.Printf("GetStoresForGeoPoint() - no stores found for postalCoode: %s, err: %v", postalCode, err)
 		return nil, err
 	}
 	defer r.Body.Close()
@@ -123,7 +107,7 @@ func (jg *JsonGateway) GetStoresForPostalCode(postalCode string, dist int) ([]*S
 	var results GeocoderResults
 	err = json.NewDecoder(r.Body).Decode(&results)
 	if err != nil {
-		fmt.Printf("GetStoresForPostalCode() - error reading response for postalCoode: %s, err: %v\n", postalCode, err)
+		log.Printf("GetStoresForPostalCode() - error reading response for postalCoode: %s, err: %v\n", postalCode, err)
 		return nil, err
 	}
 
@@ -132,63 +116,52 @@ func (jg *JsonGateway) GetStoresForPostalCode(postalCode string, dist int) ([]*S
 		switch strings.ToUpper(results.Status) {
 		case "ZERO_RESULTS":
 			err = errors.New("no results found")
-			fmt.Printf("GetStoresForPostalCode() - error reading response for postalCoode: %s, err: %v\n", postalCode, err)
+			log.Printf("GetStoresForPostalCode() - error reading response for postalCoode: %s, err: %v\n", postalCode, err)
 			return nil, err
 		case "OVER_QUERY_LIMIT":
 			err = errors.New("over quota request")
-			fmt.Printf("GetStoresForPostalCode() - error reading response for postalCoode: %s, err: %v\n", postalCode, err)
+			log.Printf("GetStoresForPostalCode() - error reading response for postalCoode: %s, err: %v\n", postalCode, err)
 			return nil, err
 		case "REQUEST_DENIED":
 			err = errors.New("request was denied")
-			fmt.Printf("GetStoresForPostalCode() - error reading response for postalCoode: %s, err: %v\n", postalCode, err)
+			log.Printf("GetStoresForPostalCode() - error reading response for postalCoode: %s, err: %v\n", postalCode, err)
 			return nil, err
 		case "INVALID_REQUEST":
 			err = errors.New("invalid request")
-			fmt.Printf("GetStoresForPostalCode() - error reading response for postalCoode: %s, err: %v\n", postalCode, err)
+			log.Printf("GetStoresForPostalCode() - error reading response for postalCoode: %s, err: %v\n", postalCode, err)
 			return nil, err
 		case "UNKNOWN_ERROR":
 			err = errors.New("server error, please, try again")
-			fmt.Printf("GetStoresForPostalCode() - error reading response for postalCoode: %s, err: %v\n", postalCode, err)
+			log.Printf("GetStoresForPostalCode() - error reading response for postalCoode: %s, err: %v\n", postalCode, err)
 			return nil, err
 		default:
 			err = errors.New("unknown error")
-			fmt.Printf("GetStoresForPostalCode() - error reading response for postalCoode: %s, err: %v\n", postalCode, err)
+			log.Printf("GetStoresForPostalCode() - error reading response for postalCoode: %s, err: %v\n", postalCode, err)
 			return nil, err
 		}
 	}
-	// fmt.Printf("GetStoresForPostalCode() - geocoding response: %v", results)
+	// log.Printf("GetStoresForPostalCode() - geocoding response: %v\n", results)
 	lat, long := results.Results[0].Geometry.Location.Lat, results.Results[0].Geometry.Location.Lng
-	fmt.Printf("GetStoresForPostalCode() - lat: %f, long: %f\n", lat, long)
+	log.Printf("GetStoresForPostalCode() - lat: %f, long: %f\n", lat, long)
 
 	return jg.GetStoresForGeoPoint(lat, long, dist)
-
-	// body, err := ioutil.ReadAll(r.Body)
-	// if err != nil {
-	// 	fmt.Printf("GetStoresForPostalCode() - error reading response for postalCoode: %s\n", postalCode)
-	// 	// jg.log.Error("GetStoresForGeoPoint() - no stores found for lat: %f, long: %f", lat, long)
-	// 	return nil, err
-	// }
-	// fmt.Printf("GetStoresForPostalCode() - geocoding response body : %s", body)
-	// return nil, nil
 }
 
 func (jg *JsonGateway) GetStoresForGeoPoint(lat, long float64, dist int) ([]*Store, error) {
 	jg.mu.RLock()
 	defer jg.mu.RUnlock()
-	fmt.Printf("GetStoresForGeoPoint() - lat: %f, long: %f, dist: %d\n", lat, long, dist)
+	log.Printf("GetStoresForGeoPoint() - lat: %f, long: %f, dist: %d\n", lat, long, dist)
 	latKey := buildMapKey(lat)
 	latStoreIDs, ok := jg.LatMap[latKey]
 	if !ok {
-		// fmt.Printf("GetStoresForGeoPoint() - no stores found for lat: %f, long: %f\n", lat, long)
-		jg.log.Error("GetStoresForGeoPoint() - no stores found for lat: %f, long: %f", lat, long)
+		log.Printf("GetStoresForGeoPoint() - no stores found for lat: %f, long: %f", lat, long)
 		return nil, fmt.Errorf("no stores found for lat: %f, long: %f", lat, long)
 	}
 
 	longKey := buildMapKey(long)
 	longStoreIDs, ok := jg.LongMap[longKey]
 	if !ok {
-		// fmt.Printf("GetStoresForGeoPoint() - no stores found for lat: %f, long: %f\n", lat, long)
-		jg.log.Error("GetStoresForGeoPoint() - no stores found for lat: %f, long: %f", lat, long)
+		log.Printf("GetStoresForGeoPoint() - no stores found for lat: %f, long: %f", lat, long)
 		return nil, fmt.Errorf("no stores found for lat: %f, long: %f", lat, long)
 	}
 
@@ -204,32 +177,26 @@ func (jg *JsonGateway) GetStoresForGeoPoint(lat, long float64, dist int) ([]*Sto
 			ids = append(ids, item)
 		}
 	}
-	fmt.Printf("GetStoresForGeoPoint() - found %d stores\n", len(ids))
-	jg.log.Debug("GetStoresForGeoPoint() - found %d stores", len(ids))
+	log.Printf("GetStoresForGeoPoint() - found %d stores\n", len(ids))
 	stores := []*Store{}
 	// origin := haversine.Point{Lat: lat, Lon: long}
 	origin := vincenty.LatLng{Latitude: lat, Longitude: long}
 	for _, v := range ids {
 		store, err := jg.GetStore(v)
 		if err != nil {
-			fmt.Printf("GetStoresForGeoPoint() - no stores found for id: %d\n", v)
-			jg.log.Debug("GetStoresForGeoPoint() - no stores found for id: %d", v)
+			log.Printf("GetStoresForGeoPoint() - no store found for id: %d\n", v)
 		}
-		// jg.log.Debug("GetStoresForGeoPoint() - store id: %d, lat: %f, long: %f", store.ID, store.Latitude, store.Longitude)
 		// pos := haversine.Point{Lat: store.Latitude, Lon: store.Longitude}
 		pos := vincenty.LatLng{Latitude: store.Latitude, Longitude: store.Longitude}
 		// d := haversine.Distance(origin, pos)
 		d := vincenty.Inverse(origin, pos)
-		// jg.log.Debug("GetStoresForGeoPoint() - distance: %f", d/1000)
-		// fmt.Printf("GetStoresForGeoPoint() - distance: %f, dist: %d\n", d.Kilometers(), dist)
-		// jg.log.Debug("GetStoresForGeoPoint() - distance: %f, dist: %f", d.Kilometers(), dist)
+		// log.Printf("GetStoresForGeoPoint() - distance: %f, dist: %d\n", d.Kilometers(), dist)
 		// if float64(d) <= dist*1000 {
 		if d.Kilometers() <= float64(dist) {
 			stores = append(stores, store)
 		}
 	}
-	fmt.Printf("GetStoresForGeoPoint() - returning %d stores\n", len(stores))
-	jg.log.Debug("GetStoresForGeoPoint() - returning %d stores", len(stores))
+	log.Printf("GetStoresForGeoPoint() - returning %d stores\n", len(stores))
 	return stores, nil
 }
 
@@ -252,12 +219,11 @@ func (jg *JsonGateway) readFile(
 	wgs *sync.WaitGroup,
 	out chan *Store,
 ) {
-	jg.log.Debug("\033[32m readFile() - start processing stores \033[0m")
-
+	log.Println("readFile() - start processing stores")
 	fileName := ctx.Value(constants.FileNameContextKey).(string)
 	resultStream, err := loader.ReadFileArray(ctx, cancel, fileName)
 	if err != nil {
-		jg.log.Debug("\033[32m readFile() - error: %v# \033[0m", err)
+		log.Printf("readFile() - error: %v# \n", err)
 		cancel()
 	}
 	count := 0
@@ -265,20 +231,20 @@ func (jg *JsonGateway) readFile(
 	for {
 		select {
 		case <-ctx.Done():
-			jg.log.Debug("\033[32m readFile() - context done \033[0m")
+			log.Println("readFile() - context done")
 			return
 		case r, ok := <-resultStream:
 			if !ok {
-				jg.log.Debug("\033[32m readFile() - result stream closed \033[0m")
+				log.Println("readFile() - result stream closed")
 				wgp.Done()
 				close(out)
 				return
 			}
 			wgs.Add(1)
 			count++
-			if count%1000 == 0 {
-				jg.log.Debug("\033[32m readFile() - publishing %d %v \033[0m", count, r)
-			}
+			// if count%1000 == 0 {
+			// 	log.Printf("readFile() - publishing %d %v\n", count, r)
+			// }
 			jg.publishStore(r, out)
 		}
 	}
@@ -287,9 +253,9 @@ func (jg *JsonGateway) readFile(
 func (jg *JsonGateway) publishStore(r map[string]interface{}, out chan *Store) {
 	store, err := mapResultToStore(r)
 	if err != nil {
-		jg.log.WithError(err).Error("\033[36m publishStore() - error publidhing store \033[0m")
+		log.Printf("publishStore() - error publishing store, error: %v\n", err)
 	} else {
-		// log.Println("\033[36m publishStore() - publishing \033[0m", store)
+		// log.Println("publishStore() - publishing: ", store)
 		out <- store
 	}
 }
@@ -301,27 +267,26 @@ func (jg *JsonGateway) processStore(
 	wgs *sync.WaitGroup,
 	out chan *Store,
 ) {
-	jg.log.Debug("\033[33m processStore() - start reading stores  \033[0m")
+	log.Println("processStore() - start reading stores")
 	count := 0
 
 	for {
 		select {
 		case <-ctx.Done():
-			jg.log.Debug("\033[33m processStore() - context done \033[0m")
+			log.Println("processStore() - context done")
 			return
 		case store, ok := <-out:
 			if !ok {
-				jg.log.Debug("\033[33m processStore() - store notification channel closed \033[0m")
+				log.Println("processStore() - store notification channel closed")
 				wgp.Done()
 				return
 			}
-
-			if count%1000 == 0 {
-				jg.log.Debug("\033[33m  processStore() - received store notification %d %v \033[0m", count, store)
-			}
+			// if count%1000 == 0 {
+			// 	log.Printf("processStore() - received store notification %d %v\n", count, store)
+			// }
 			success := jg.updateDataStores(store)
 			if !success {
-				jg.log.Debug("\033[33m processStore() - error adding store %d %v \033[0m", count, store)
+				log.Printf("processStore() - error adding store %d %v\n", count, store)
 			}
 			count++
 			wgs.Done()
@@ -374,8 +339,4 @@ func buildMapKey(v float64) string {
 	k := fmt.Sprintf("%.1f-%.1f", le, te)
 	// log.Println("buildMapKey() - map key: ", k)
 	return k
-}
-
-func roundTo(n float64, decimals uint32) float64 {
-	return math.Round(n*math.Pow(10, math.Pow(10, float64(decimals)))) / math.Pow(10, math.Pow(10, float64(decimals)))
 }

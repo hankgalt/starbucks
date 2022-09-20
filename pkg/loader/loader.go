@@ -36,16 +36,13 @@ func ReadFileArray(ctx context.Context, cancel func(), fileName string) (<-chan 
 	go func(ct context.Context, can func(), fp string, fi *os.File, rs chan map[string]interface{}) {
 		defer func(rst chan map[string]interface{}) {
 			log.Printf("Closing result stream")
-			log.Println()
 			close(rst)
 		}(rs)
 
 		defer func(fpa string, fil *os.File, canc func()) {
 			log.Printf("Closing file: %s", fpa)
-			log.Println()
 			if err = fil.Close(); err != nil {
 				log.Printf("\033[31m Error closing file: %s, error: %v \033[0m", fpa, err)
-				log.Println()
 				canc()
 			}
 		}(fp, fi, can)
@@ -88,13 +85,12 @@ func ReadFileArray(ctx context.Context, cancel func(), fileName string) (<-chan 
 
 // checks if file exists
 func ifFileExists(filePath string) error {
-	path, err := os.Getwd()
-	if err != nil {
-		log.Println(err)
-	}
-	log.Println("ifFileExists() - current path: ", path)
-
-	_, err = os.Stat(filePath)
+	// path, err := os.Getwd()
+	// if err != nil {
+	// 	log.Println(err)
+	// }
+	// log.Println("ifFileExists() - current path: ", path)
+	_, err := os.Stat(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			log.Printf("ifFileExists() - \033[31m File %s doesn't exist, error: %v \033[0m", filePath, err)

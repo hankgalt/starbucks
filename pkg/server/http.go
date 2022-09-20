@@ -2,7 +2,7 @@ package server
 
 import (
 	"encoding/json"
-	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -54,20 +54,23 @@ func (s *httpServer) handleSearch(w http.ResponseWriter, r *http.Request) {
 	var req SearchRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
+		log.Printf("handleSearch() - error decoding searchRequest, error: %v\n", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	fmt.Printf("handleSearch() - searchRequest: %v\n", req)
+	log.Printf("handleSearch() - searchRequest: %v\n", req)
 	var stores []*listing.Store
 	if req.PostalCode != "" {
 		stores, err = s.gateway.GetStoresForPostalCode(req.PostalCode, req.Distance)
 		if err != nil {
+			log.Printf("handleSearch() - error getting stores for postal code %s, error: %v\n", req.PostalCode, err)
 			http.Error(w, err.Error(), http.StatusNoContent)
 			return
 		}
 	} else {
 		stores, err = s.gateway.GetStoresForGeoPoint(req.Latitude, req.Longitude, req.Distance)
 		if err != nil {
+			log.Printf("handleSearch() - error getting stores for lat %f, long: %f, error: %v\n", req.Latitude, req.Longitude, err)
 			http.Error(w, err.Error(), http.StatusNoContent)
 			return
 		}

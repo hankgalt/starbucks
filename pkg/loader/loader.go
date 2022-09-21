@@ -4,11 +4,12 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"log"
 	"os"
 	"path/filepath"
 
 	"github.com/hankgalt/starbucks/pkg/errors"
+	"github.com/hankgalt/starbucks/pkg/logging"
+	"go.uber.org/zap"
 )
 
 // ReadFileArray reads an array of json data from existing file, one by one,
@@ -19,7 +20,7 @@ func ReadFileArray(ctx context.Context, cancel func(), fileName string) (<-chan 
 	// check if file exists
 	err := ifFileExists(filePath)
 	if err != nil {
-		log.Printf("\033[31m Error checking %s existence, error: %v \033[0m", filePath, err)
+		logging.Logger.Error("error checking file existence", zap.Error(err), zap.String("filePath", filePath))
 		cancel()
 		return nil, errors.WrapError(err, "error checking %s existence", filePath)
 	}
@@ -27,7 +28,7 @@ func ReadFileArray(ctx context.Context, cancel func(), fileName string) (<-chan 
 	// Open file and deferred close it
 	f, err := os.Open(filePath)
 	if err != nil {
-		log.Printf("\033[31m Error reading file: %s, error: %v \033[0m", filePath, err)
+		logging.Logger.Error("error opening file", zap.Error(err), zap.String("filePath", filePath))
 		cancel()
 		return nil, errors.WrapError(err, "error reading file: %s", filePath)
 	}
@@ -35,14 +36,14 @@ func ReadFileArray(ctx context.Context, cancel func(), fileName string) (<-chan 
 	resultStream := make(chan map[string]interface{}, 2)
 	go func(ct context.Context, can func(), fp string, fi *os.File, rs chan map[string]interface{}) {
 		defer func(rst chan map[string]interface{}) {
-			log.Printf("Closing result stream")
+			logging.Logger.Info("Closing result stream")
 			close(rst)
 		}(rs)
 
 		defer func(fpa string, fil *os.File, canc func()) {
-			log.Printf("Closing file: %s", fpa)
+			logging.Logger.Info("Closing file")
 			if err = fil.Close(); err != nil {
-				log.Printf("\033[31m Error closing file: %s, error: %v \033[0m", fpa, err)
+				logging.Logger.Error("error closing file", zap.Error(err), zap.String("filePath", filePath))
 				canc()
 			}
 		}(fp, fi, can)
@@ -53,7 +54,7 @@ func ReadFileArray(ctx context.Context, cancel func(), fileName string) (<-chan 
 		// read open bracket
 		t, err := dec.Token()
 		if err != nil {
-			log.Printf("\033[31m Error reading starting token: %v, for file: %s, error: %v \033[0m", t, fp, err)
+			logging.Logger.Error("error reading starting token", zap.Error(err), zap.Any("token", t), zap.String("filePath", filePath))
 			cancel()
 		}
 
@@ -62,7 +63,7 @@ func ReadFileArray(ctx context.Context, cancel func(), fileName string) (<-chan 
 			var result map[string]interface{}
 			err := dec.Decode(&result)
 			if err != nil {
-				log.Printf("\033[31m Error decoding result json, error: %v \033[0m", err)
+				logging.Logger.Error("error decoding result json", zap.Error(err))
 			}
 			// log.Printf("Retrieved %#v\n", result)
 			select {
@@ -75,7 +76,7 @@ func ReadFileArray(ctx context.Context, cancel func(), fileName string) (<-chan 
 		// read closing bracket
 		t, err = dec.Token()
 		if err != nil {
-			log.Printf("\033[31m Error reading closing token: %v, for file: %s, error: %v \033[0m", t, fp, err)
+			logging.Logger.Error("error reading closing token", zap.Error(err), zap.Any("token", t), zap.String("filePath", filePath))
 			can()
 		}
 	}(ctx, cancel, fileName, f, resultStream)
@@ -93,10 +94,10 @@ func ifFileExists(filePath string) error {
 	_, err := os.Stat(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Printf("ifFileExists() - \033[31m File %s doesn't exist, error: %v \033[0m", filePath, err)
+			logging.Logger.Error("file doesn't exist", zap.Error(err), zap.String("filePath", filePath))
 			return errors.WrapError(err, "File: %s doesn't exist", filePath)
 		} else {
-			log.Printf("ifFileExists() - \033[31m Error accessing file: %s, error: %v \033[0m", filePath, err)
+			logging.Logger.Error("unable to access file", zap.Error(err), zap.String("filePath", filePath))
 			return errors.WrapError(err, "Error accessing file: %s", filePath)
 		}
 	}

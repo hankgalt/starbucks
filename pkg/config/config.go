@@ -4,23 +4,24 @@ import (
 	"bufio"
 	"encoding/json"
 	"io"
-	"log"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/hankgalt/starbucks/pkg/logging"
+	"go.uber.org/zap"
 )
 
 type Configuration struct {
 	GEOCODER_API_KEY string `json:"geocoder_api_key"`
 }
 
-func GetConfig() *Configuration {
-	var config *Configuration
-
+func GetConfig() (*Configuration, error) {
 	rPath, err := os.Getwd()
 	if err != nil {
-		log.Println("\033[31m Error accessing config path \033[0m")
+		logging.Logger.Error("unable to access file path", zap.Error(err))
+		return nil, err
 	}
 
 	var filePath string
@@ -31,30 +32,28 @@ func GetConfig() *Configuration {
 		filePath = filepath.Join(rPath, "config.json")
 	}
 
-	// log.Printf("config file path: %s", filePath)
-
 	_, err = os.Stat(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Printf("\033[31m %s doesn't exist, error: %v \033[0m", filePath, err)
+			logging.Logger.Error("file doesn't exist", zap.Error(err), zap.String("filePath", filePath))
 		} else {
-			log.Printf("\033[31m Error accessing file: %s: %v \033[0m", filePath, err)
+			logging.Logger.Error("error accessing file", zap.Error(err), zap.String("filePath", filePath))
 		}
-	} else {
-		config = getFromConfigJson(filePath)
+		return nil, err
 	}
-	return config
+
+	return getFromConfigJson(filePath)
 }
 
-func getFromConfigJson(filePath string) *Configuration {
+func getFromConfigJson(filePath string) (*Configuration, error) {
 	f, err := os.Open(filePath)
 	if err != nil {
-		log.Printf("\033[31m Error opening config file: %s: %v \033[0m", filePath, err)
-		return nil
+		logging.Logger.Error("error opening file", zap.Error(err), zap.String("filePath", filePath))
+		return nil, err
 	}
 	defer func() {
 		if err = f.Close(); err != nil {
-			log.Printf("\033[31m Error closing config file: %s: %v \033[0m", filePath, err)
+			logging.Logger.Error("error closing file", zap.Error(err), zap.String("filePath", filePath))
 		}
 	}()
 
@@ -68,14 +67,14 @@ func getFromConfigJson(filePath string) *Configuration {
 		if err := dec.Decode(&conf); err == io.EOF {
 			break
 		} else if err != nil {
-			log.Printf("\033[31m Error decoding config json: %v \033[0m", err)
-			return nil
+			logging.Logger.Error("error decoding config json", zap.Error(err), zap.String("filePath", filePath))
+			return nil, err
 		}
 		if conf.GEOCODER_API_KEY == "" {
-			log.Println("\033[31m Error geocoder api key missing \033[0m")
-			return nil
+			logging.Logger.Error("missing geocoder config", zap.Error(err), zap.String("filePath", filePath))
+			return nil, err
 		}
 		config.GEOCODER_API_KEY = conf.GEOCODER_API_KEY
 	}
-	return config
+	return config, nil
 }

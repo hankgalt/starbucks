@@ -8,7 +8,7 @@ func (c ContextKey) String() string {
 	return string(c)
 }
 
-const PORT = 8080
+const SERVICE_PORT = 8080
 const HEALTH_CHECK_URL = "/health"
 const SEARCH_URL = "/search"
 

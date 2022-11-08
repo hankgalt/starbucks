@@ -11,6 +11,7 @@ func (c ContextKey) String() string {
 const SERVICE_PORT = 8080
 const HEALTH_CHECK_URL = "/health"
 const SEARCH_URL = "/search"
+const STATS_CHECK_URL = "/stats"
 
 const READ_RATE = 500 * time.Millisecond
 const ReadRateContextKey = ContextKey("readrate")

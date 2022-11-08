@@ -1,8 +1,8 @@
 package main
 
-import "github.com/hankgalt/starbucks/pkg/listing"
+import "github.com/hankgalt/starbucks/pkg/services/store"
 
-var DefaultStores = []listing.Store{
+var DefaultStores = []store.Store{
 	{
 		City:      "Hong Kong",
 		Name:      "Plaza Hollywood",

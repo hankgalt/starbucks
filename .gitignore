@@ -1,1 +1,1 @@
-cmd/store-server/*.log
+cmd/store-server/logs/*

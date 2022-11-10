@@ -10,7 +10,7 @@ import (
 
 var Logger *zap.Logger
 
-func InitializeLogger() {
+func NewZapLogger() *zap.Logger {
 	config := zap.NewProductionEncoderConfig()
 	config.EncodeTime = zapcore.ISO8601TimeEncoder
 	fileEncoder := zapcore.NewJSONEncoder(config)
@@ -29,4 +29,5 @@ func InitializeLogger() {
 		zapcore.NewCore(consoleEncoder, zapcore.AddSync(os.Stdout), defaultLogLevel),
 	)
 	Logger = zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
+	return Logger
 }

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"net/http"
 
@@ -12,21 +13,40 @@ import (
 	"go.uber.org/zap"
 )
 
-func NewApp(a string, gcs *geocode.GeoCodeService, s *store.StoreService, l *zap.Logger) *http.Server {
-	httpsrv := newApp(gcs, s, l)
+func NewApp(a string, gcs *geocode.GeoCodeService, s *store.StoreService, l *zap.Logger) *app {
+	app := newApp(gcs, s, l)
 	r := mux.NewRouter()
 
-	r.HandleFunc(constants.SEARCH_URL, httpsrv.handleSearch).Methods("POST")
-	r.HandleFunc(constants.STATS_CHECK_URL, httpsrv.handleStatsCheck)
-	r.HandleFunc(constants.HEALTH_CHECK_URL, httpsrv.handleHealthCheck)
+	r.HandleFunc(constants.SEARCH_URL, app.handleSearch).Methods("POST")
+	r.HandleFunc(constants.STATS_CHECK_URL, app.handleStatsCheck)
+	r.HandleFunc(constants.HEALTH_CHECK_URL, app.handleHealthCheck)
 
-	return &http.Server{
-		Addr:    a,
-		Handler: r,
+	cfg := &tls.Config{
+		MinVersion:               tls.VersionTLS12,
+		CurvePreferences:         []tls.CurveID{tls.CurveP521, tls.CurveP384, tls.CurveP256},
+		PreferServerCipherSuites: true,
+		CipherSuites: []uint16{
+			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+			tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+		},
 	}
+
+	httpSrv := &http.Server{
+		Addr:      a,
+		Handler:   r,
+		TLSConfig: cfg,
+	}
+
+	app.Server = httpSrv
+	return app
 }
 
 type app struct {
+	Server  *http.Server
 	geocode *geocode.GeoCodeService
 	store   *store.StoreService
 	logger  *zap.Logger
@@ -57,13 +77,14 @@ func newApp(gcs *geocode.GeoCodeService, s *store.StoreService, l *zap.Logger) *
 }
 
 func (s *app) handleHealthCheck(rw http.ResponseWriter, req *http.Request) {
+	rw.Header().Add("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
 	rw.WriteHeader(http.StatusOK)
 	_, _ = rw.Write([]byte("Success"))
 }
 
 func (s *app) handleStatsCheck(rw http.ResponseWriter, req *http.Request) {
-	ctx := context.Background()
-	stats := s.store.GetStoreStats(ctx)
+	rw.Header().Add("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
+	stats := s.store.GetStoreStats()
 	res := StatsResponse{Stats: stats}
 
 	err := json.NewEncoder(rw).Encode(res)
@@ -73,12 +94,13 @@ func (s *app) handleStatsCheck(rw http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (s *app) handleSearch(w http.ResponseWriter, r *http.Request) {
+func (s *app) handleSearch(rw http.ResponseWriter, r *http.Request) {
+	rw.Header().Add("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
 	var req SearchRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		s.logger.Error("error decoding searchRequest", zap.Error(err))
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(rw, err.Error(), http.StatusBadRequest)
 		return
 	}
 	ctx := context.Background()
@@ -87,7 +109,7 @@ func (s *app) handleSearch(w http.ResponseWriter, r *http.Request) {
 		point, err := s.geocode.Geocode(ctx, req.PostalCode, "US")
 		if err != nil {
 			s.logger.Error("error geocoding postalcode", zap.Error(err), zap.String("postalcode", req.PostalCode))
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(rw, err.Error(), http.StatusBadRequest)
 			return
 		}
 		req.Latitude = point.Latitude
@@ -98,14 +120,14 @@ func (s *app) handleSearch(w http.ResponseWriter, r *http.Request) {
 	stores, err = s.store.GetStoresForGeoPoint(ctx, req.Latitude, req.Longitude, req.Distance)
 	if err != nil {
 		s.logger.Error("error getting stores", zap.Error(err), zap.Float64("latitude", req.Latitude), zap.Float64("longitude", req.Longitude))
-		http.Error(w, err.Error(), http.StatusNoContent)
+		http.Error(rw, err.Error(), http.StatusNoContent)
 		return
 	}
 
 	res := SearchResponse{Stores: stores, Count: len(stores)}
-	err = json.NewEncoder(w).Encode(res)
+	err = json.NewEncoder(rw).Encode(res)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
 }

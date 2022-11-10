@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package store.v1;
+
+option go_package = "github.com/hankgalt/starbucks/api/log_v1";
+
+message Store {
+    uint32 id = 1;
+    string name = 2;
+    float longitude = 3;
+    float latitude = 4;
+    string city = 5;
+    string country = 6;
+}
+
+message GetStoreRequest {
+    uint32 storeId = 1;
+}
+
+message GetStoreResponse {
+    Store store = 1;
+}
+
+message AddStoreRequest {
+    uint32 storeId = 1;
+    string name = 2;
+    float longitude = 3;
+    float latitude = 4;
+    string city = 5;
+    string country = 6;
+}
+
+message AddStoreResponse {
+    bool ok = 1;
+}
+
+service Stores {
+    rpc GetStore(GetStoreRequest) returns (GetStoreResponse) {}
+    rpc AddStore(AddStoreRequest) returns (AddStoreResponse) {}
+}

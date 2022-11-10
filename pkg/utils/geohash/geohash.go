@@ -2,6 +2,8 @@ package geohash
 
 import (
 	"fmt"
+
+	"github.com/hankgalt/starbucks/pkg/errors"
 )
 
 type Point struct {
@@ -62,8 +64,7 @@ func Encode(lat float64, lon float64, percision int) (string, error) {
 func Decode(hash string) (*Point, error) {
 	boundaries, err := bounds(hash)
 	if err != nil {
-		fmt.Printf("error getting bounds for %s, error: %v", hash, err)
-		return nil, err
+		return nil, errors.NewAppError(errors.ERROR_DECODING_BOUNDS)
 	}
 
 	var point Point

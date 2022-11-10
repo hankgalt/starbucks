@@ -9,18 +9,18 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/hankgalt/starbucks/pkg/logging"
 	"go.uber.org/zap"
 )
 
 type Configuration struct {
 	GEOCODER_API_KEY string `json:"geocoder_api_key"`
+	PORT             int    `json:"port"`
 }
 
-func GetConfig() (*Configuration, error) {
+func GetAppConfig(logger *zap.Logger) (*Configuration, error) {
 	rPath, err := os.Getwd()
 	if err != nil {
-		logging.Logger.Error("unable to access file path", zap.Error(err))
+		logger.Error("unable to access file path", zap.Error(err))
 		return nil, err
 	}
 
@@ -35,25 +35,25 @@ func GetConfig() (*Configuration, error) {
 	_, err = os.Stat(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			logging.Logger.Error("file doesn't exist", zap.Error(err), zap.String("filePath", filePath))
+			logger.Error("file doesn't exist", zap.Error(err), zap.String("filePath", filePath))
 		} else {
-			logging.Logger.Error("error accessing file", zap.Error(err), zap.String("filePath", filePath))
+			logger.Error("error accessing file", zap.Error(err), zap.String("filePath", filePath))
 		}
 		return nil, err
 	}
 
-	return getFromConfigJson(filePath)
+	return getFromConfigJson(logger, filePath)
 }
 
-func getFromConfigJson(filePath string) (*Configuration, error) {
+func getFromConfigJson(logger *zap.Logger, filePath string) (*Configuration, error) {
 	f, err := os.Open(filePath)
 	if err != nil {
-		logging.Logger.Error("error opening file", zap.Error(err), zap.String("filePath", filePath))
+		logger.Error("error opening file", zap.Error(err), zap.String("filePath", filePath))
 		return nil, err
 	}
 	defer func() {
 		if err = f.Close(); err != nil {
-			logging.Logger.Error("error closing file", zap.Error(err), zap.String("filePath", filePath))
+			logger.Error("error closing file", zap.Error(err), zap.String("filePath", filePath))
 		}
 	}()
 
@@ -67,14 +67,18 @@ func getFromConfigJson(filePath string) (*Configuration, error) {
 		if err := dec.Decode(&conf); err == io.EOF {
 			break
 		} else if err != nil {
-			logging.Logger.Error("error decoding config json", zap.Error(err), zap.String("filePath", filePath))
+			logger.Error("error decoding config json", zap.Error(err), zap.String("filePath", filePath))
 			return nil, err
 		}
 		if conf.GEOCODER_API_KEY == "" {
-			logging.Logger.Error("missing geocoder config", zap.Error(err), zap.String("filePath", filePath))
+			logger.Error("missing geocoder config", zap.Error(err), zap.String("filePath", filePath))
 			return nil, err
 		}
 		config.GEOCODER_API_KEY = conf.GEOCODER_API_KEY
+		if conf.PORT == 0 {
+			config.PORT = 8080
+		}
+		config.PORT = conf.PORT
 	}
 	return config, nil
 }

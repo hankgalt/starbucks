@@ -3,9 +3,12 @@ package config
 import (
 	"log"
 	"testing"
+
+	"go.uber.org/zap/zaptest"
 )
 
 func TestGetConfig(t *testing.T) {
-	config, _ := GetConfig()
+	logger := zaptest.NewLogger(t)
+	config, _ := GetAppConfig(logger)
 	log.Printf("Config: %v\n", config)
 }

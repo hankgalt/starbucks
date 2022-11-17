@@ -96,11 +96,10 @@ func (g *GeoCodeService) Geocode(ctx context.Context, postalCode, countryCode st
 
 	var results GeocoderResults
 	err = json.NewDecoder(r.Body).Decode(&results)
-	if err != nil {
-		g.logger.Error("error decoding geocode response", zap.Error(err), zap.String("postalCode", postalCode))
-		return nil, err
+	if err != nil || &results == (*GeocoderResults)(nil) || len(results.Results) < 1 {
+		g.logger.Error(errors.ERROR_GEOCODING_POSTALCODE, zap.Error(err), zap.String("postalCode", postalCode))
+		return nil, errors.NewAppError(errors.ERROR_GEOCODING_POSTALCODE)
 	}
-
 	lat, long := results.Results[0].Geometry.Location.Lat, results.Results[0].Geometry.Location.Lng
 
 	// req := &maps.GeocodingRequest{
@@ -112,11 +111,11 @@ func (g *GeoCodeService) Geocode(ctx context.Context, postalCode, countryCode st
 
 	// results, err := g.client.Geocode(ctx, req)
 	// if err != nil || len(results) < 1 {
-	// 	g.logger.Error("error geocoding", zap.Error(err), zap.String("country", countryCode), zap.String("postalcode", postalCode))
-	// 	return nil, err
+	// 	g.logger.Error(errors.ERROR_GEOCODING_POSTALCODE, zap.Error(err), zap.String("country", countryCode), zap.String("postalcode", postalCode))
+	// 	return nil, errors.NewAppError(errors.ERROR_GEOCODING_POSTALCODE)
 	// }
-
 	// lat, long := results[0].Geometry.Location.Lat, results[0].Geometry.Location.Lng
+
 	return &geohash.Point{
 		Latitude:  lat,
 		Longitude: long,

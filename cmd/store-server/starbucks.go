@@ -82,7 +82,7 @@ func main() {
 	<-quit
 	logger.Info("starting server shutdown")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	if err := app.Server.Shutdown(ctx); err != nil {
 		logger.Fatal("error shutting down server", zap.Error(err))

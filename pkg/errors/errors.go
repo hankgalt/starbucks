@@ -14,6 +14,7 @@ var (
 )
 
 const (
+	ERROR_GEOCODING_POSTALCODE     string = "error geocoding"
 	ERROR_ENCODING_LAT_LONG        string = "error encoding lat/long"
 	ERROR_DECODING_BOUNDS          string = "error decoding bounds"
 	ERROR_NO_STORE_FOUND           string = "no store found"

@@ -1,5 +1,14 @@
 CONFIG_PATH=${HOME}/.certs/
 
+starthttp:
+		cd cmd/store-server && go run starbucks.go
+
+compile:
+		protoc api/v1/*.proto --go_out=. --go_opt=paths=source_relative --proto_path=.
+
+compilegrpc:
+		protoc api/v1/*.proto --go_out=. --go-grpc_out=. --go_opt=paths=source_relative --go-grpc_opt=paths=source_relative --proto_path=.
+
 .PHONY: init
 init:
 		mkdir -p ${CONFIG_PATH}
